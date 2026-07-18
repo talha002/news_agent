@@ -34,7 +34,7 @@ app = FastAPI(
 )
 
 mcp = FastApiMCP(app)
-mcp.mount_sse()
+mcp.mount_http()
 
 
 @app.get("/health", include_in_schema=False)

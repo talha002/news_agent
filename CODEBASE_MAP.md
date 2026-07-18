@@ -7,7 +7,7 @@
 | **Name** | `news-agent` |
 | **Purpose** | MCP server that reads `informer@daily.dev` emails, extracts article links, fetches article text, and returns JSON. |
 | **Framework** | FastAPI + `fastapi-mcp` |
-| **Transport** | SSE at `/sse` |
+| **Transport** | Streamable HTTP at `/mcp` |
 | **Auth** | Gmail IMAP App Password + MCP Bearer token |
 | **Email processing** | Marks emails as read after `read_daily_dev_articles` succeeds. |
 
@@ -147,15 +147,15 @@ def parse(self, email: MailMessage) -> list[Article]: ...
 Other key items:
 
 - `mcp = FastApiMCP(app)` — creates MCP server from FastAPI app.
-- `mcp.mount_sse()` — mounts SSE transport at `/sse`.
+- `mcp.mount_http()` — mounts Streamable HTTP transport at `/mcp`.
 
 ## 4. Data flow
 
 ```
-LibreChat ──SSE──▶ /sse
-                     │
-                     ▼
-         FastAPI-MCP routes tool call to endpoint
+MCP client ──Streamable HTTP──▶ /mcp
+                      │
+                      ▼
+          FastAPI-MCP routes tool call to endpoint
                      │
     ┌────────────────┼────────────────┐
     ▼                ▼                ▼
@@ -176,10 +176,10 @@ _emails          articles(DailyDevParser)
             fetch_article_text (per link)
                      │
                      ▼
-            mark_email_as_read
-                     │
-                     ▼
-            JSON response to LibreChat
+             mark_email_as_read
+                      │
+                      ▼
+             JSON response to MCP client
 ```
 
 ## 5. Configuration
