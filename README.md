@@ -14,7 +14,7 @@ A FastAPI-based MCP (Model Context Protocol) server that connects to Gmail, read
 
 ## Requirements
 
-- Python 3.10+
+- Python 3.13+
 - Gmail account with **2FA enabled** and an **App Password**
 
 ## Installation
