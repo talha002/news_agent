@@ -132,7 +132,7 @@ def parse(self, email: MailMessage) -> list[Article]: ...
 
 | Function | Purpose |
 |----------|---------|
-| `fetch_article_text(url)` | `requests.get` the URL, then extract main text with `trafilatura`; falls back to BeautifulSoup naive extraction. |
+| `fetch_article_text(url)` | Fetch the URL with a module-level `httpx.Client`, then extract main text with `trafilatura`; falls back to BeautifulSoup naive extraction. |
 | `_clean_text(text)` | Normalize whitespace. |
 
 ### `src/main.py`

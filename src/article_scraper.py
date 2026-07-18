@@ -5,7 +5,7 @@ import logging
 import re
 from urllib.parse import urlparse
 
-import requests
+import httpx
 import trafilatura
 from bs4 import BeautifulSoup
 
@@ -19,6 +19,12 @@ USER_AGENT = (
     "Chrome/120.0.0.0 Safari/537.36"
 )
 
+_client = httpx.Client(
+    follow_redirects=True,
+    timeout=settings.request_timeout,
+    headers={"User-Agent": USER_AGENT},
+)
+
 
 def fetch_article_text(url: str) -> str:
     """Download the page at *url* and return the main readable text.
@@ -29,16 +35,11 @@ def fetch_article_text(url: str) -> str:
     server-rendered Next.js payload. Raises on network/parsing errors.
     """
     try:
-        response = requests.get(
-            url,
-            timeout=settings.request_timeout,
-            headers={"User-Agent": USER_AGENT},
-            allow_redirects=True,
-        )
+        response = _client.get(url)
         response.raise_for_status()
         html = response.text
-        final_url = response.url
-    except requests.RequestException as exc:
+        final_url = str(response.url)
+    except httpx.HTTPError as exc:
         logger.exception("Network error fetching %s", url)
         raise RuntimeError(f"Failed to fetch {url}: {exc}") from exc
 
@@ -118,12 +119,7 @@ def _extract_from_daily_dev(html: str) -> str | None:
 
 def _fetch_external_text(url: str) -> str | None:
     """Fetch and extract readable text from an external article URL."""
-    response = requests.get(
-        url,
-        timeout=settings.request_timeout,
-        headers={"User-Agent": USER_AGENT},
-        allow_redirects=True,
-    )
+    response = _client.get(url)
     response.raise_for_status()
 
     text = trafilatura.extract(

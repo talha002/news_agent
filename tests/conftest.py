@@ -105,9 +105,9 @@ def patch_imap_client() -> Generator[Any, None, None]:
 
 @pytest.fixture
 async def async_http_200() -> AsyncGenerator[Any, None]:
-    """Patch requests.get to return a successful HTML response."""
+    """Patch the httpx client to return a successful HTML response."""
     response = MagicMock()
     response.text = "<html><body><p>Article body</p></body></html>"
     response.raise_for_status.return_value = None
-    with patch("src.article_scraper.requests.get", return_value=response) as mock_get:
+    with patch("src.article_scraper._client.get", return_value=response) as mock_get:
         yield mock_get
