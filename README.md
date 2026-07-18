@@ -6,7 +6,7 @@ A FastAPI-based MCP (Model Context Protocol) server that connects to Gmail, read
 
 - **Gmail IMAP + App Password** authentication.
 - **Bearer token** protection on the MCP endpoints.
-- **SSE transport** for LibreChat / remote MCP clients.
+- **Streamable HTTP transport** (`/mcp`) for Codex, LibreChat, and other modern MCP clients.
 - Three MCP tools:
   1. `list_daily_dev_emails` — list unread daily.dev emails.
   2. `read_daily_dev_articles` — read the latest unread email (or a specific UID), extract articles, fetch their text, and mark the email as read.
@@ -70,7 +70,7 @@ docker build -t news-agent .
 docker run -d --name news-agent --env-file .env -p 8000:8000 news-agent
 ```
 
-The server is available at `http://localhost:8000` and the MCP SSE endpoint at `http://localhost:8000/sse`.
+The server is available at `http://localhost:8000` and the MCP endpoint at `http://localhost:8000/mcp`.
 
 ## Running the server
 
@@ -84,10 +84,10 @@ Or with auto-reload during development:
 .venv\Scripts\python -m uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-The MCP SSE endpoint is available at:
+The MCP Streamable HTTP endpoint is available at:
 
 ```
-http://localhost:8000/sse
+http://localhost:8000/mcp
 ```
 
 ## Local UAT
@@ -119,7 +119,7 @@ The notebook (`build.ipynb`) covers:
 - listing unread daily.dev emails (`POST /list-daily-dev-emails`)
 - reading articles from the latest unread email (`POST /read-daily-dev-articles`)
 - fetching a single article URL (`POST /read-article-url`)
-- SSE transport smoke test (`GET /sse`)
+- Streamable HTTP transport smoke test (`POST /mcp` initialize)
 - stopping the server
 
 The notebook sets a 60-second request timeout on every call, and the server now applies both `IMAP_TIMEOUT` (default 30 s) to Gmail IMAP **and** an endpoint-level `asyncio.wait_for` so it returns a `504` error instead of hanging forever. If the Gmail-dependent steps still appear to hang, set `IMAP_TIMEOUT=10` in `.env`, **restart the server**, and retry.
@@ -181,13 +181,40 @@ The notebook sets a 60-second request timeout on every call, and the server now 
      -d '{"url": "https://daily.dev/blog/getting-started-with-daily-dev"}'
    ```
 
-7. Verify the SSE endpoint responds:
+7. Verify the MCP endpoint responds to a JSON-RPC `initialize` request:
 
    ```bash
-   curl --max-time 10 -H "Authorization: Bearer $MCP_API_TOKEN" http://localhost:8000/sse
+   curl --max-time 10 -X POST http://localhost:8000/mcp \
+     -H "Authorization: Bearer $MCP_API_TOKEN" \
+     -H "Content-Type: application/json" \
+     -H "Accept: application/json, text/event-stream" \
+     -d '{
+       "jsonrpc": "2.0",
+       "id": 1,
+       "method": "initialize",
+       "params": {
+         "protocolVersion": "2025-03-26",
+         "capabilities": {},
+         "clientInfo": {"name": "curl-smoke", "version": "1.0.0"}
+       }
+     }'
    ```
 
-   Press `Ctrl+C` to close the stream.
+   Expected: `200 OK` with a JSON-RPC result containing `protocolVersion`, `capabilities`, and `serverInfo`.
+
+## Codex configuration
+
+Codex supports STDIO and Streamable HTTP MCP transports. Add this to your
+`~/.codex/config.toml`:
+
+```toml
+[mcp_servers.news-agent]
+url = "http://localhost:8000/mcp"
+bearer_token_env_var = "MCP_API_TOKEN"
+```
+
+Set the `MCP_API_TOKEN` environment variable to the same value as in `.env`, then
+restart Codex. Codex POSTs the JSON-RPC `initialize` request to `/mcp`.
 
 ## LibreChat configuration
 
@@ -196,15 +223,15 @@ Add this to your `librechat.yaml`:
 ```yaml
 mcpServers:
   daily-dev-reader:
-    type: sse
-    url: http://your-server:8000/sse
+    type: streamable-http
+    url: http://your-server:8000/mcp
     headers:
       Authorization: Bearer ${MCP_API_TOKEN}
     initTimeout: 15000
     timeout: 60000
 ```
 
-If LibreChat is running on the same machine, use `http://localhost:8000/sse`.
+If LibreChat is running on the same machine, use `http://localhost:8000/mcp`.
 
 ## MCP tool usage
 

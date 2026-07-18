@@ -4,8 +4,10 @@ from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+import pytest
 from fastapi.testclient import TestClient
 
+from src.main import mcp
 from src.models import Article, ArticlesResponse
 
 
@@ -13,6 +15,66 @@ def test_health(client: TestClient) -> None:
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+
+
+@pytest.fixture
+def fresh_mcp_session_manager() -> None:
+    """Reset fastapi-mcp's lazy HTTP session manager between tests.
+
+    TestClient cancels the manager's background task after each request, so
+    clear the started flag to let the next request spin up a fresh manager.
+    """
+    mcp._http_transport._manager_started = False
+
+
+def _mcp_headers(auth_headers: dict[str, str]) -> dict[str, str]:
+    return {
+        **auth_headers,
+        "Content-Type": "application/json",
+        "Accept": "application/json, text/event-stream",
+    }
+
+
+def _initialize_body() -> dict[str, Any]:
+    return {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+            "protocolVersion": "2025-03-26",
+            "capabilities": {},
+            "clientInfo": {"name": "test-client", "version": "0.0.1"},
+        },
+    }
+
+
+def test_mcp_initialize_handshake(
+    client: TestClient, auth_headers: dict[str, str], fresh_mcp_session_manager: None
+) -> None:
+    response = client.post("/mcp", json=_initialize_body(), headers=_mcp_headers(auth_headers))
+
+    assert response.status_code == 200
+    assert "mcp-session-id" in response.headers
+    result = response.json()["result"]
+    assert result["protocolVersion"]
+    assert "tools" in result["capabilities"]
+    assert result["serverInfo"]["name"] == "Daily.dev Email Reader"
+
+
+def test_mcp_rejects_non_initialize_without_session(
+    client: TestClient, fresh_mcp_session_manager: None
+) -> None:
+    response = client.post(
+        "/mcp",
+        json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
+        headers={"Accept": "application/json, text/event-stream"},
+    )
+    assert response.status_code == 400
+
+
+def test_sse_endpoint_removed(client: TestClient) -> None:
+    assert client.get("/sse").status_code == 404
+    assert client.post("/sse").status_code == 404
 
 
 def test_list_daily_dev_emails_requires_auth(client: TestClient) -> None:
